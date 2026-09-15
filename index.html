@@ -34,6 +34,8 @@
       outline: none;
     }
     input:focus, select:focus { border-color: #1a73e8; }
+    
+    /* GPS Container & Refresh Button */
     .gps-box {
       background: #e8f0fe;
       border: 1px solid #aecbfa;
@@ -42,7 +44,26 @@
       font-size: 13px;
       color: #174ea6;
       margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
     }
+    .gps-info { flex: 1; }
+    .refresh-btn {
+      width: auto;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: #ffffff;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .refresh-btn:active { background: #e8f0fe; }
+
     button.submit-btn {
       background-color: #1a73e8;
       color: white;
@@ -64,7 +85,7 @@
     <div class="form-group">
       <label for="building">Building Name</label>
       <select id="building" required>
-       <option value="">-- Select Building --</option>
+        <option value="">-- Select Building --</option>
         <option value="CDPO(NTB)">CDPO(NTB)</option>
         <option value="Annexe Hostel (WH)">Annexe Hostel (WH)</option>
         <option value="Tagore Hostel (WH)">Tagore Hostel (WH)</option>
@@ -80,7 +101,16 @@
 
     <div class="form-group">
       <label for="floor">Floor Number</label>
-      <input type="number" id="floor" placeholder="e.g. 0 for Ground, 1 for 1st" required>
+      <select id="floor" required>
+        <option value="">-- Select Floor --</option>
+        <option value="0">0 (Ground Floor)</option>
+        <option value="1">1st Floor</option>
+        <option value="2">2nd Floor</option>
+        <option value="3">3rd Floor</option>
+        <option value="4">4th Floor</option>
+        <option value="5">5th Floor</option>
+        <option value="6">6th Floor</option>
+      </select>
     </div>
 
     <div class="form-group">
@@ -89,12 +119,13 @@
     </div>
 
     <div class="form-group">
-      <label for="roomName">Room Name</label>
-      <input type="text" id="roomName" placeholder="e.g. Room 101 or Physics Lab" required>
+      <label for="roomName">Room Name (Optional)</label>
+      <input type="text" id="roomName" placeholder="e.g. Room 101 or Physics Lab">
     </div>
 
-    <div class="gps-box" id="gpsStatus">
-      📡 Acquiring GPS Location...
+    <div class="gps-box">
+      <div class="gps-info" id="gpsStatus">📡 Acquiring GPS Location...</div>
+      <button type="button" class="refresh-btn" onclick="fetchGPSLocation()">🔄 Refresh GPS</button>
     </div>
 
     <button type="submit" class="submit-btn" id="submitBtn" disabled>Saving Room...</button>
@@ -109,29 +140,33 @@
   let currentLat = null;
   let currentLng = null;
 
-  // Get high-accuracy GPS coordinates on page load
-  window.onload = function() {
+  function fetchGPSLocation() {
+    const statusBox = document.getElementById('gpsStatus');
+    statusBox.innerHTML = '📡 Acquiring GPS Location...';
+    
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         position => {
           currentLat = position.coords.latitude;
           currentLng = position.coords.longitude;
-          document.getElementById('gpsStatus').innerHTML = 
-            `✅ <b>GPS Lock Acquired:</b><br>Lat: ${currentLat.toFixed(6)}, Lng: ${currentLng.toFixed(6)}`;
+          statusBox.innerHTML = `✅ <b>GPS Lock Acquired:</b><br>Lat: ${currentLat.toFixed(6)}, Lng: ${currentLng.toFixed(6)}`;
           document.getElementById('submitBtn').disabled = false;
           document.getElementById('submitBtn').innerText = "Save to Google Sheet";
         },
         error => {
-          document.getElementById('gpsStatus').innerHTML = `❌ <b>GPS Error:</b> ${error.message}. Please enable location permissions.`;
+          statusBox.innerHTML = `❌ <b>GPS Error:</b> ${error.message}.`;
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
-      document.getElementById('gpsStatus').innerText = "❌ Geolocation is not supported by your browser.";
+      statusBox.innerText = "❌ Geolocation is not supported by your browser.";
     }
+  }
+
+  window.onload = function() {
+    fetchGPSLocation();
   };
 
-  // Generate Room_ID: 1st 4 alpha chars of building + room number (clean)
   function generateRoomId(building, roomNumber) {
     const cleanBuilding = building.replace(/[^a-zA-Z]/g, '').substring(0, 4);
     const cleanRoom = roomNumber.replace(/[^a-zA-Z0-9]/g, '');
@@ -142,7 +177,7 @@
     event.preventDefault();
 
     if (!currentLat || !currentLng) {
-      alert("GPS coordinates not acquired yet. Please allow location access.");
+      alert("GPS coordinates not acquired yet. Please allow location access or click Refresh GPS.");
       return;
     }
 
@@ -157,7 +192,7 @@
     const building = document.getElementById('building').value;
     const floor = document.getElementById('floor').value;
     const roomNumber = document.getElementById('roomNumber').value.trim();
-    const roomName = document.getElementById('roomName').value.trim();
+    let roomName = document.getElementById('roomName').value.trim();
     const roomId = generateRoomId(building, roomNumber);
 
     if (!roomName) {
@@ -175,7 +210,6 @@
     };
 
     try {
-      // Use no-cors mode to send data cross-origin safely to Apps Script
       await fetch(scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -186,7 +220,7 @@
       statusDiv.style.color = "#28a745";
       statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b> to sheet.`;
 
-      // Reset form fields
+      // Reset ONLY room inputs (keeps Building and Floor intact)
       document.getElementById('roomNumber').value = '';
       document.getElementById('roomName').value = '';
 
