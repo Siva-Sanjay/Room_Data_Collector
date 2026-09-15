@@ -160,6 +160,10 @@
     const roomName = document.getElementById('roomName').value.trim();
     const roomId = generateRoomId(building, roomNumber);
 
+    if (!roomName) {
+      roomName = roomId;
+    }
+
     const payload = {
       roomId: roomId,
       building: building,
