@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Room Coordinate Collector</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: #ffffff;
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 420px;
+    }
+    h2 { margin-top: 0; color: #1a73e8; font-size: 20px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: #3c4043; }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #dadce0;
+      font-size: 15px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: #1a73e8; }
+    .gps-box {
+      background: #e8f0fe;
+      border: 1px solid #aecbfa;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #174ea6;
+      margin-bottom: 16px;
+    }
+    button.submit-btn {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button.submit-btn:disabled { background-color: #bdc1c6; }
+    #status { margin-top: 12px; font-size: 14px; text-align: center; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>📍 Add Campus Room</h2>
+  
+  <form id="roomForm" onsubmit="handleSubmit(event)">
+    <div class="form-group">
+      <label for="building">Building Name</label>
+      <select id="building" required>
+        <option value="">-- Select Building --</option>
+        <option value="Annexe (Tagore Hostel)">Annexe (Tagore Hostel)</option>
+        <option value="Academic Block">Academic Block</option>
+        <option value="Main Building">Main Building</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="floor">Floor Number</label>
+      <input type="number" id="floor" placeholder="e.g. 0 for Ground, 1 for 1st" required>
+    </div>
+
+    <div class="form-group">
+      <label for="roomNumber">Room Number</label>
+      <input type="text" id="roomNumber" placeholder="e.g. 101 or C-35" required>
+    </div>
+
+    <div class="form-group">
+      <label for="roomName">Room Name</label>
+      <input type="text" id="roomName" placeholder="e.g. Room 101 or Physics Lab" required>
+    </div>
+
+    <div class="gps-box" id="gpsStatus">
+      📡 Acquiring GPS Location...
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn" disabled>Saving Room...</button>
+  </form>
+
+  <div id="status"></div>
+</div>
+
+<script>
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
+
+  let currentLat = null;
+  let currentLng = null;
+
+  // Get high-accuracy GPS coordinates on page load
+  window.onload = function() {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          currentLat = position.coords.latitude;
+          currentLng = position.coords.longitude;
+          document.getElementById('gpsStatus').innerHTML = 
+            `✅ <b>GPS Lock Acquired:</b><br>Lat: ${currentLat.toFixed(6)}, Lng: ${currentLng.toFixed(6)}`;
+          document.getElementById('submitBtn').disabled = false;
+          document.getElementById('submitBtn').innerText = "Save to Google Sheet";
+        },
+        error => {
+          document.getElementById('gpsStatus').innerHTML = `❌ <b>GPS Error:</b> ${error.message}. Please enable location permissions.`;
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      document.getElementById('gpsStatus').innerText = "❌ Geolocation is not supported by your browser.";
+    }
+  };
+
+  // Generate Room_ID: 1st 4 alpha chars of building + room number (clean)
+  function generateRoomId(building, roomNumber) {
+    const cleanBuilding = building.replace(/[^a-zA-Z]/g, '').substring(0, 4);
+    const cleanRoom = roomNumber.replace(/[^a-zA-Z0-9]/g, '');
+    return `${cleanBuilding}_${cleanRoom}`;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!currentLat || !currentLng) {
+      alert("GPS coordinates not acquired yet. Please allow location access.");
+      return;
+    }
+
+    const submitBtn = document.getElementById('submitBtn');
+    const statusDiv = document.getElementById('status');
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Submitting...";
+    statusDiv.style.color = "#3c4043";
+    statusDiv.innerText = "Sending data to Google Sheets...";
+
+    const building = document.getElementById('building').value;
+    const floor = document.getElementById('floor').value;
+    const roomNumber = document.getElementById('roomNumber').value.trim();
+    const roomName = document.getElementById('roomName').value.trim();
+    const roomId = generateRoomId(building, roomNumber);
+
+    const payload = {
+      roomId: roomId,
+      building: building,
+      floor: floor,
+      roomNumber: roomNumber,
+      roomName: roomName,
+      latitude: currentLat,
+      longitude: currentLng
+    };
+
+    try {
+      // Use no-cors mode to send data cross-origin safely to Apps Script
+      await fetch(scriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      statusDiv.style.color = "#28a745";
+      statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b> to sheet.`;
+
+      // Reset form fields
+      document.getElementById('roomNumber').value = '';
+      document.getElementById('roomName').value = '';
+
+    } catch (err) {
+      statusDiv.style.color = "#d93025";
+      statusDiv.innerText = "❌ Error saving data: " + err.message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Save to Google Sheet";
+    }
+  }
+</script>
+
+</body>
+</html>
