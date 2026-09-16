@@ -265,16 +265,16 @@
   let currentLat = 0;
   let currentLng = 0;
 
-   function initMap() {
+     function initMap() {
     map = L.map('map', {
       zoomControl: false,
       tap: false
     }).setView([20.5937, 78.9629], 5);
 
-    // Esri World Imagery (Satellite Tiles)
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    // Google Maps Satellite Tiles
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 20,
+      attribution: 'Map data &copy; Google'
     }).addTo(map);
 
     map.on('move', updateCenterCoordinates);
@@ -284,7 +284,7 @@
 
     locateDevice();
   }
-
+  
   function updateCenterCoordinates() {
     const center = map.getCenter();
     currentLat = center.lat;
