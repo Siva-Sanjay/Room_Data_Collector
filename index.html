@@ -186,6 +186,27 @@
       font-weight: 500;
       min-height: 18px;
     }
+    .map-wrapper, #map {
+      /* Disable text/image selection and native dragging */
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+
+      -webkit-user-drag: none;
+      user-drag: none;
+
+      /* Disable long-press callout menus (iOS Safari) */
+      -webkit-touch-callout: none;
+    }
+
+    /* Prevent Leaflet image tiles from triggering drag-and-drop */
+    .leaflet-container img {
+      -webkit-user-drag: none;
+      user-drag: none;
+      -webkit-touch-callout: none;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -373,7 +394,7 @@
     return `${cleanBuilding}_${cleanRoom}`;
   }
 
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault();
 
     if (!currentLat || !currentLng) {
@@ -383,9 +404,6 @@
 
     const submitBtn = document.getElementById('submitBtn');
     const statusDiv = document.getElementById('status');
-
-    submitBtn.disabled = true;
-    submitBtn.innerText = "Saving...";
 
     const building = document.getElementById('building').value;
     const floor = document.getElementById('floor').value;
@@ -407,23 +425,19 @@
       longitude: currentLng
     };
 
+    // 1. Update UI immediately without locking the button
+    statusDiv.style.color = "#28a745";
+    statusDiv.innerHTML = `✅ Saved <b>${roomId}</b>!`;
+
+    // 2. Fire request in background (no-cors) without waiting for a response
     fetch(scriptUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    })
-    .then(() => {
-      statusDiv.style.color = "#28a745";
-      statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b>.`;
-    })
-    .catch(err => {
+    }).catch(err => {
       statusDiv.style.color = "#d93025";
       statusDiv.innerText = "❌ Sync Failed: " + err.message;
-    })
-    .finally(() => {
-      submitBtn.disabled = false;
-      submitBtn.innerText = "Save to Google Sheet";
     });
   }
 </script>
