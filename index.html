@@ -265,21 +265,21 @@
   let currentLat = 0;
   let currentLng = 0;
 
-  function initMap() {
+   function initMap() {
     map = L.map('map', {
       zoomControl: false,
       tap: false
     }).setView([20.5937, 78.9629], 5);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Esri World Imagery (Satellite Tiles)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap'
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
     }).addTo(map);
 
     map.on('move', updateCenterCoordinates);
     map.on('moveend', updateCenterCoordinates);
 
-    // Invalidate map size after load to avoid rendering glitch on mobile
     setTimeout(() => { map.invalidateSize(); }, 300);
 
     locateDevice();
