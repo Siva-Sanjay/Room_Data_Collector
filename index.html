@@ -257,6 +257,8 @@
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
 
 <script>
   const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
@@ -265,16 +267,19 @@
   let currentLat = 0;
   let currentLng = 0;
 
-     function initMap() {
+    // URL of your published Google Sheet CSV
+  const sheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=956140635&single=true&output=csv';
+
+  function initMap() {
     map = L.map('map', {
       zoomControl: false,
       tap: false
     }).setView([20.5937, 78.9629], 5);
 
-    // Google Maps Satellite Tiles
-    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    // Google Satellite Hybrid Tiles
+    L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
       maxZoom: 20,
-      attribution: 'Map data &copy; Google'
+      attribution: '&copy; Google Maps'
     }).addTo(map);
 
     map.on('move', updateCenterCoordinates);
@@ -282,9 +287,39 @@
 
     setTimeout(() => { map.invalidateSize(); }, 300);
 
+    // Load previously mapped rooms onto the mini-map
+    loadExistingRooms();
+
     locateDevice();
   }
-  
+
+  function loadExistingRooms() {
+    Papa.parse(sheetCsvUrl, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        results.data.forEach(room => {
+          const lat = parseFloat(room.Latitude);
+          const lng = parseFloat(room.Longitude);
+
+          if (!isNaN(lat) && !isNaN(lng)) {
+            // Create a small, semi-transparent circle marker for existing rooms
+            L.circleMarker([lat, lng], {
+              radius: 5,
+              color: '#ffffff',
+              weight: 1.5,
+              fillColor: '#34a853', // Green fill for added rooms
+              fillOpacity: 0.9
+            })
+            .bindPopup(`<b>${room.Room_Number}</b><br>${room.Building}`)
+            .addTo(map);
+          }
+        });
+      }
+    });
+  }
+
   function updateCenterCoordinates() {
     const center = map.getCenter();
     currentLat = center.lat;
