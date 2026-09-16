@@ -255,20 +255,18 @@
   <div id="status"></div>
 </div>
 
-<!-- Leaflet JS -->
+<!-- Leaflet JS & PapaParse -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
-
 <script>
   const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
+  const sheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=956140635&single=true&output=csv';
 
   let map;
   let currentLat = 0;
   let currentLng = 0;
-
-    // URL of your published Google Sheet CSV
-  const sheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=956140635&single=true&output=csv';
+  let existingRoomsLayer = L.layerGroup(); // Group layer for easily refreshing markers
 
   function initMap() {
     map = L.map('map', {
@@ -282,19 +280,28 @@
       attribution: '&copy; Google Maps'
     }).addTo(map);
 
+    // Layer group to hold past reference markers
+    existingRoomsLayer.addTo(map);
+
     map.on('move', updateCenterCoordinates);
     map.on('moveend', updateCenterCoordinates);
 
     setTimeout(() => { map.invalidateSize(); }, 300);
 
-    // Load previously mapped rooms onto the mini-map
+    // Load existing rooms onto map
     loadExistingRooms();
 
     locateDevice();
   }
 
   function loadExistingRooms() {
-    Papa.parse(sheetCsvUrl, {
+    // Clear old markers before reloading to avoid duplications
+    existingRoomsLayer.clearLayers();
+
+    // Cache-buster timestamp ensures immediate retrieval of fresh data
+    const freshCsvUrl = sheetCsvUrl + '&t=' + new Date().getTime();
+
+    Papa.parse(freshCsvUrl, {
       download: true,
       header: true,
       skipEmptyLines: true,
@@ -304,16 +311,15 @@
           const lng = parseFloat(room.Longitude);
 
           if (!isNaN(lat) && !isNaN(lng)) {
-            // Create a small, semi-transparent circle marker for existing rooms
             L.circleMarker([lat, lng], {
               radius: 5,
               color: '#ffffff',
               weight: 1.5,
-              fillColor: '#34a853', // Green fill for added rooms
+              fillColor: '#34a853',
               fillOpacity: 0.9
             })
             .bindPopup(`<b>${room.Room_Number}</b><br>${room.Building}`)
-            .addTo(map);
+            .addTo(existingRoomsLayer);
           }
         });
       }
@@ -389,19 +395,28 @@
       longitude: currentLng
     };
 
-    statusDiv.style.color = "#28a745";
-    statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b> in background.`;
-    submitBtn.disabled = false;
-    submitBtn.innerText = "Save to Google Sheet";
-
     fetch(scriptUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    }).catch(err => {
+    })
+    .then(() => {
+      statusDiv.style.color = "#28a745";
+      statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b>.`;
+
+      // Refresh map markers after 1.5 seconds to pull updated Google Sheet data
+      setTimeout(() => {
+        loadExistingRooms();
+      }, 1500);
+    })
+    .catch(err => {
       statusDiv.style.color = "#d93025";
       statusDiv.innerText = "❌ Sync Failed: " + err.message;
+    })
+    .finally(() => {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Save to Google Sheet";
     });
   }
 </script>
