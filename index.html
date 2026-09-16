@@ -2,68 +2,123 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Room Coordinate Collector</title>
   
   <!-- Leaflet CSS for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: #f4f6f9;
+    * {
+      box-sizing: border-box;
       margin: 0;
-      padding: 16px;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f4f6f9;
+      color: #3c4043;
       display: flex;
       justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 12px;
     }
+
     .card {
       background: #ffffff;
-      padding: 20px;
+      padding: 16px;
       border-radius: 16px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       width: 100%;
-      max-width: 420px;
+      max-width: 480px; /* Mobile first standard container */
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
-    h2 { margin-top: 0; color: #1a73e8; font-size: 20px; }
-    .form-group { margin-bottom: 14px; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: #3c4043; }
+
+    h2 {
+      color: #1a73e8;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 13px;
+      color: #4a4e51;
+    }
+
     input, select, button {
       width: 100%;
-      padding: 12px;
+      height: 44px; /* Touch-friendly target size */
+      padding: 0 12px;
       border-radius: 8px;
       border: 1px solid #dadce0;
       font-size: 15px;
+      background-color: #fff;
       outline: none;
+      -webkit-appearance: none;
+      appearance: none;
     }
-    input:focus, select:focus { border-color: #1a73e8; }
 
-    /* Map Box Styling */
-    .map-container {
+    select {
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%3c4a4e51' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      padding-right: 36px;
+    }
+
+    input:focus, select:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.15);
+    }
+
+    /* Mobile Map Layout */
+    .map-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .map-wrapper {
       position: relative;
       width: 100%;
-      height: 220px;
-      border-radius: 10px;
+      height: 200px; /* Reduced mobile height */
+      border-radius: 12px;
       overflow: hidden;
       border: 1px solid #dadce0;
-      margin-bottom: 10px;
+      touch-action: none;
     }
+
     #map {
       width: 100%;
       height: 100%;
+      z-index: 1;
     }
-    /* Fixed Center Pointer overlay */
+
+    /* Fixed Pin Overlay */
     .center-pointer {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 24px;
-      height: 24px;
-      margin-top: -24px; /* offset to align pin tip at exact center */
-      margin-left: -12px;
+      width: 28px;
+      height: 28px;
+      transform: translate(-50%, -100%);
       z-index: 1000;
-      pointer-events: none; /* allows map drag underneath */
+      pointer-events: none;
+      filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.3));
     }
 
     .coords-bar {
@@ -76,11 +131,18 @@
       border-radius: 8px;
       font-size: 12px;
       color: #174ea6;
-      margin-bottom: 16px;
     }
+
+    .coord-info {
+      line-height: 1.3;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
     .gps-btn {
       width: auto;
-      padding: 6px 10px;
+      height: 32px;
+      padding: 0 10px;
       font-size: 12px;
       background: #ffffff;
       color: #1a73e8;
@@ -90,7 +152,10 @@
       font-weight: 600;
       white-space: nowrap;
     }
-    .gps-btn:active { background: #e8f0fe; }
+
+    .gps-btn:active {
+      background: #e8f0fe;
+    }
 
     button.submit-btn {
       background-color: #1a73e8;
@@ -99,11 +164,215 @@
       font-weight: 600;
       cursor: pointer;
       font-size: 16px;
+      margin-top: 6px;
+      box-shadow: 0 2px 6px rgba(26,115,232,0.3);
     }
-    button.submit-btn:disabled { background-color: #bdc1c6; cursor: not-allowed; }
-    #status { margin-top: 12px; font-size: 14px; text-align: center; font-weight: 500; }
+
+    button.submit-btn:active {
+      background-color: #1557b0;
+    }
+
+    button.submit-btn:disabled {
+      background-color: #bdc1c6;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    #status {
+      font-size: 13px;
+      text-align: center;
+      font-weight: 500;
+      min-height: 18px;
+    }
   </style>
 </head>
+<body>
+
+<div class="card">
+  <h2>📍 Add Campus Room</h2>
+  
+  <form id="roomForm" onsubmit="handleSubmit(event)" style="display:flex; flex-direction:column; gap:12px;">
+    
+    <div class="form-group">
+      <label for="building">Building Name</label>
+      <select id="building" required>
+        <option value="">-- Select Building --</option>
+        <option value="CDPO(NTB)">CDPO(NTB)</option>
+        <option value="Annexe Hostel (WH)">Annexe Hostel (WH)</option>
+        <option value="Tagore Hostel (WH)">Tagore Hostel (WH)</option>
+        <option value="Ramanujan Hostel (OH)">Ramanujan Hostel (OH)</option>
+        <option value="Lake View Hostel">Lake View Hostel</option>
+        <option value="New Hostel">New Hostel</option>
+        <option value="New Acad Block (NAB)">New Acad Block (NAB)</option>
+        <option value="Old Acad Block (OAB)">Old Acad Block (OAB)</option>
+        <option value="Management Development Centre (MDC)">Management Development Centre (MDC)</option>
+        <option value="AmphiTheatre">AmphiTheatre</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="floor">Floor Number</label>
+      <select id="floor" required>
+        <option value="">-- Select Floor --</option>
+        <option value="0">0 (Ground Floor)</option>
+        <option value="1">1st Floor</option>
+        <option value="2">2nd Floor</option>
+        <option value="3">3rd Floor</option>
+        <option value="4">4th Floor</option>
+        <option value="5">5th Floor</option>
+        <option value="6">6th Floor</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="roomNumber">Room Number</label>
+      <input type="text" id="roomNumber" placeholder="e.g. 101 or C-35" required>
+    </div>
+
+    <div class="form-group">
+      <label for="roomName">Room Name (Optional)</label>
+      <input type="text" id="roomName" placeholder="e.g. Room 101 or Physics Lab">
+    </div>
+
+    <div class="map-section">
+      <label>Position Pin at Exact Room Spot</label>
+      <div class="map-wrapper">
+        <div id="map"></div>
+        <svg class="center-pointer" viewBox="0 0 24 24" fill="#ea4335">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      </div>
+
+      <div class="coords-bar">
+        <div class="coord-info" id="coordText">Lat: --<br>Lng: --</div>
+        <button type="button" class="gps-btn" onclick="locateDevice()">📍 My GPS</button>
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">Save to Google Sheet</button>
+  </form>
+
+  <div id="status"></div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
+
+  let map;
+  let currentLat = 0;
+  let currentLng = 0;
+
+  function initMap() {
+    map = L.map('map', {
+      zoomControl: false,
+      tap: false
+    }).setView([20.5937, 78.9629], 5);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    map.on('move', updateCenterCoordinates);
+    map.on('moveend', updateCenterCoordinates);
+
+    // Invalidate map size after load to avoid rendering glitch on mobile
+    setTimeout(() => { map.invalidateSize(); }, 300);
+
+    locateDevice();
+  }
+
+  function updateCenterCoordinates() {
+    const center = map.getCenter();
+    currentLat = center.lat;
+    currentLng = center.lng;
+    document.getElementById('coordText').innerHTML = `Lat: ${currentLat.toFixed(6)}<br>Lng: ${currentLng.toFixed(6)}`;
+  }
+
+  function locateDevice() {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          map.setView([lat, lng], 19);
+          updateCenterCoordinates();
+        },
+        error => {
+          console.warn("GPS acquire error: " + error.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  }
+
+  window.onload = function() {
+    initMap();
+    fetch(scriptUrl, { mode: 'no-cors' }).catch(() => {});
+  };
+
+  function generateRoomId(building, roomNumber) {
+    const cleanBuilding = building.replace(/[^a-zA-Z]/g, '').substring(0, 4);
+    const cleanRoom = roomNumber.replace(/[^a-zA-Z0-9]/g, '');
+    return `${cleanBuilding}_${cleanRoom}`;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!currentLat || !currentLng) {
+      alert("Please ensure coordinates are selected on the map.");
+      return;
+    }
+
+    const submitBtn = document.getElementById('submitBtn');
+    const statusDiv = document.getElementById('status');
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Saving...";
+
+    const building = document.getElementById('building').value;
+    const floor = document.getElementById('floor').value;
+    const roomNumber = document.getElementById('roomNumber').value.trim();
+    let roomName = document.getElementById('roomName').value.trim();
+    const roomId = generateRoomId(building, roomNumber);
+
+    if (!roomName) {
+      roomName = roomId;
+    }
+
+    const payload = {
+      roomId: roomId,
+      building: building,
+      floor: floor,
+      roomNumber: roomNumber,
+      roomName: roomName,
+      latitude: currentLat,
+      longitude: currentLng
+    };
+
+    statusDiv.style.color = "#28a745";
+    statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b> in background.`;
+    submitBtn.disabled = false;
+    submitBtn.innerText = "Save to Google Sheet";
+
+    fetch(scriptUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      statusDiv.style.color = "#d93025";
+      statusDiv.innerText = "❌ Sync Failed: " + err.message;
+    });
+  }
+</script>
+
+</body>
+</html>
 <body>
 
 <div class="card">
