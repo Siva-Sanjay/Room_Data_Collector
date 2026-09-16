@@ -4,26 +4,30 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Room Coordinate Collector</title>
+  
+  <!-- Leaflet CSS for Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <style>
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #f4f6f9;
       margin: 0;
-      padding: 20px;
+      padding: 16px;
       display: flex;
       justify-content: center;
     }
     .card {
       background: #ffffff;
-      padding: 24px;
+      padding: 20px;
       border-radius: 16px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       width: 100%;
       max-width: 420px;
     }
     h2 { margin-top: 0; color: #1a73e8; font-size: 20px; }
-    .form-group { margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
     label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: #3c4043; }
     input, select, button {
       width: 100%;
@@ -34,22 +38,47 @@
       outline: none;
     }
     input:focus, select:focus { border-color: #1a73e8; }
-    
-    .gps-box {
-      background: #e8f0fe;
-      border: 1px solid #aecbfa;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      color: #174ea6;
-      margin-bottom: 16px;
+
+    /* Map Box Styling */
+    .map-container {
+      position: relative;
+      width: 100%;
+      height: 220px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #dadce0;
+      margin-bottom: 10px;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    /* Fixed Center Pointer overlay */
+    .center-pointer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 24px;
+      height: 24px;
+      margin-top: -24px; /* offset to align pin tip at exact center */
+      margin-left: -12px;
+      z-index: 1000;
+      pointer-events: none; /* allows map drag underneath */
+    }
+
+    .coords-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 8px;
+      background: #e8f0fe;
+      border: 1px solid #aecbfa;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #174ea6;
+      margin-bottom: 16px;
     }
-    .gps-info { flex: 1; }
-    .refresh-btn {
+    .gps-btn {
       width: auto;
       padding: 6px 10px;
       font-size: 12px;
@@ -61,7 +90,7 @@
       font-weight: 600;
       white-space: nowrap;
     }
-    .refresh-btn:active { background: #e8f0fe; }
+    .gps-btn:active { background: #e8f0fe; }
 
     button.submit-btn {
       background-color: #1a73e8;
@@ -104,6 +133,164 @@
         <option value="">-- Select Floor --</option>
         <option value="0">0 (Ground Floor)</option>
         <option value="1">1st Floor</option>
+        <option value="2">2nd Floor</option>
+        <option value="3">3rd Floor</option>
+        <option value="4">4th Floor</option>
+        <option value="5">5th Floor</option>
+        <option value="6">6th Floor</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="roomNumber">Room Number</label>
+      <input type="text" id="roomNumber" placeholder="e.g. 101 or C-35" required>
+    </div>
+
+    <div class="form-group">
+      <label for="roomName">Room Name (Optional)</label>
+      <input type="text" id="roomName" placeholder="e.g. Room 101 or Physics Lab">
+    </div>
+
+    <!-- Map & Center Pin Section -->
+    <label>Position Pin at Exact Room Spot</label>
+    <div class="map-container">
+      <div id="map"></div>
+      <!-- Center Pin SVG SVG -->
+      <svg class="center-pointer" viewBox="0 0 24 24" fill="#d93025">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+      </svg>
+    </div>
+
+    <div class="coords-bar">
+      <div id="coordText">Lat: --, Lng: --</div>
+      <button type="button" class="gps-btn" onclick="locateDevice()">📍 Center My GPS</button>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">Save to Google Sheet</button>
+  </form>
+
+  <div id="status"></div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
+
+  let map;
+  let currentLat = 0;
+  let currentLng = 0;
+
+  function initMap() {
+    // Default fallback coordinates (Campus default)
+    map = L.map('map', {
+      zoomControl: false
+    }).setView([20.5937, 78.9629], 5);
+
+    // Free OpenStreetMap tile server
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Update coordinate text on center when map stops dragging or zooming
+    map.on('move', updateCenterCoordinates);
+    map.on('moveend', updateCenterCoordinates);
+
+    // Initial GPS locate call on map ready
+    locateDevice();
+  }
+
+  function updateCenterCoordinates() {
+    const center = map.getCenter();
+    currentLat = center.lat;
+    currentLng = center.lng;
+    document.getElementById('coordText').innerHTML = `<b>Lat:</b> ${currentLat.toFixed(6)}<br><b>Lng:</b> ${currentLng.toFixed(6)}`;
+  }
+
+  function locateDevice() {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          map.setView([lat, lng], 19); // Zoom close to location
+          updateCenterCoordinates();
+        },
+        error => {
+          console.warn("GPS acquire error: " + error.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  }
+
+  window.onload = function() {
+    initMap();
+    fetch(scriptUrl, { mode: 'no-cors' }).catch(() => {});
+  };
+
+  function generateRoomId(building, roomNumber) {
+    const cleanBuilding = building.replace(/[^a-zA-Z]/g, '').substring(0, 4);
+    const cleanRoom = roomNumber.replace(/[^a-zA-Z0-9]/g, '');
+    return `${cleanBuilding}_${cleanRoom}`;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!currentLat || !currentLng) {
+      alert("Please ensure coordinates are selected on the map.");
+      return;
+    }
+
+    const submitBtn = document.getElementById('submitBtn');
+    const statusDiv = document.getElementById('status');
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Saving...";
+
+    const building = document.getElementById('building').value;
+    const floor = document.getElementById('floor').value;
+    const roomNumber = document.getElementById('roomNumber').value.trim();
+    let roomName = document.getElementById('roomName').value.trim();
+    const roomId = generateRoomId(building, roomNumber);
+
+    if (!roomName) {
+      roomName = roomId;
+    }
+
+    const payload = {
+      roomId: roomId,
+      building: building,
+      floor: floor,
+      roomNumber: roomNumber,
+      roomName: roomName,
+      latitude: currentLat,
+      longitude: currentLng
+    };
+
+    // Instant user feedback while saving occurs asynchronously in background
+    statusDiv.style.color = "#28a745";
+    statusDiv.innerHTML = `✅ Saved! Added <b>${roomId}</b> in background.`;
+    submitBtn.disabled = false;
+    submitBtn.innerText = "Save to Google Sheet";
+
+    fetch(scriptUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      statusDiv.style.color = "#d93025";
+      statusDiv.innerText = "❌ Background Sync Failed: " + err.message;
+    });
+  }
+</script>
+
+</body>
+</html>
         <option value="2">2nd Floor</option>
         <option value="3">3rd Floor</option>
         <option value="4">4th Floor</option>
