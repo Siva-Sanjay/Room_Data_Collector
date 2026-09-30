@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Room & Path Coordinate Collector</title>
   
+  <!-- Leaflet CSS for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
@@ -238,6 +239,7 @@
 
 <div class="card">
   
+  <!-- Mode Selector Tabs -->
   <div class="mode-switch">
     <button type="button" class="mode-btn active" id="roomModeBtn" onclick="switchMode('room')">📍 Room Mode</button>
     <button type="button" class="mode-btn" id="pathModeBtn" onclick="switchMode('path')">🛣️ Path Drawer</button>
@@ -345,21 +347,24 @@
   <div id="status"></div>
 </div>
 
+<!-- Leaflet JS & PapaParse -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
 <script>
   const scriptUrl = 'https://script.google.com/macros/s/AKfycbyWa1KFB_GYx5eEfOU7MwgNIGjffYc8gAFItINk1czves7vJMT0tIXd5REntF02tiCPBw/exec';
   const sheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=956140635&single=true&output=csv';
+  const pathSheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=1640199293&single=true&output=csv';
 
   let map;
-  let currentMode = 'room';
+  let currentMode = 'room'; // 'room' or 'path'
   let currentLat = 0;
   let currentLng = 0;
   
   let existingRoomsLayer = L.layerGroup(); 
-  let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved & active path lines
+  let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved path lines from Google Sheet
   
+  // Path Drawer variables
   let pathCoordinates = [];
   let currentPolyline = null;
   let pathMarkersLayer = L.layerGroup();
@@ -370,12 +375,12 @@
       tap: false
     }).setView([20.5937, 78.9629], 5);
 
+    // Google Satellite Hybrid Tiles
     L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
       maxZoom: 20,
       attribution: '&copy; Google Maps'
     }).addTo(map);
 
-    // Add room markers layer initially
     existingRoomsLayer.addTo(map);
     pathMarkersLayer.addTo(map);
 
@@ -386,6 +391,7 @@
     setTimeout(() => { map.invalidateSize(); }, 300);
 
     loadExistingRooms();
+    loadExistingPaths();
     locateDevice();
   }
 
@@ -406,7 +412,7 @@
       pointer.style.display = 'block';
       mapLabel.innerText = "Position Pin at Exact Room Spot";
 
-      // SHOW room pins, HIDE paths layer
+      // SHOW room pins, HIDE paths overlay
       if (!map.hasLayer(existingRoomsLayer)) {
         map.addLayer(existingRoomsLayer);
       }
@@ -421,7 +427,7 @@
       pointer.style.display = 'none';
       mapLabel.innerText = "Tap on map to place segment points";
 
-      // HIDE room pins, SHOW paths layer
+      // HIDE room pins, SHOW paths overlay
       if (map.hasLayer(existingRoomsLayer)) {
         map.removeLayer(existingRoomsLayer);
       }
@@ -450,7 +456,7 @@
 
     if (pathCoordinates.length > 0) {
       currentPolyline = L.polyline(pathCoordinates, {
-        color: '#ff9800', // Vibrant Orange for current active drawing
+        color: '#ff9800', // Active drawing segment (Orange)
         weight: 5,
         opacity: 0.9
       }).addTo(map);
@@ -492,11 +498,11 @@
 
     const pathId = `PATH_${Date.now()}`;
 
-    // Add finalized path to persistent overlay layer so it stays visible while drawing next segments
+    // Immediately display newly drawn path in the overlay layer
     L.polyline(pathCoordinates, {
       color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
       weight: 4,
-      opacity: 0.75
+      opacity: 0.8
     }).bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`).addTo(drawnPathsOverlayLayer);
 
     const payload = {
@@ -531,7 +537,8 @@
 
     if (isManual) {
       statusDiv.style.color = "#1a73e8";
-      statusDiv.innerText = "↻ Refreshing map markers...";
+      statusDiv.innerText = "↻ Refreshing map...";
+      loadExistingPaths(); // Refresh paths as well on manual refresh
     }
 
     const freshCsvUrl = sheetCsvUrl + '&t=' + new Date().getTime();
@@ -563,6 +570,41 @@
           statusDiv.innerText = "✅ Map refreshed!";
           setTimeout(() => { statusDiv.innerText = ""; }, 2000);
         }
+      }
+    });
+  }
+
+  // Load and render all saved path segments from Path_data CSV tab
+  function loadExistingPaths() {
+    drawnPathsOverlayLayer.clearLayers();
+    const freshPathCsvUrl = pathSheetCsvUrl + '&t=' + new Date().getTime();
+
+    Papa.parse(freshPathCsvUrl, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        results.data.forEach(row => {
+          try {
+            if (row.Coordinates_JSON) {
+              const coords = JSON.parse(row.Coordinates_JSON);
+              const pathType = row.Path_Type || 'walkway';
+              const pathName = row.Path_Name || 'Saved Segment';
+
+              if (Array.isArray(coords) && coords.length >= 2) {
+                L.polyline(coords, {
+                  color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
+                  weight: 4,
+                  opacity: 0.8
+                })
+                .bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`)
+                .addTo(drawnPathsOverlayLayer);
+              }
+            }
+          } catch (err) {
+            console.warn("Could not parse path row: ", err);
+          }
+        });
       }
     });
   }
