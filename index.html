@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Room & Path Coordinate Collector</title>
   
-  <!-- Leaflet CSS for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
@@ -239,7 +238,6 @@
 
 <div class="card">
   
-  <!-- Mode Selector Tabs -->
   <div class="mode-switch">
     <button type="button" class="mode-btn active" id="roomModeBtn" onclick="switchMode('room')">📍 Room Mode</button>
     <button type="button" class="mode-btn" id="pathModeBtn" onclick="switchMode('path')">🛣️ Path Drawer</button>
@@ -347,7 +345,6 @@
   <div id="status"></div>
 </div>
 
-<!-- Leaflet JS & PapaParse -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
@@ -356,13 +353,13 @@
   const sheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMqGQWWtVef47JkjW_yzDHMGSDHibCGHl1alPbr3G_1pzqoY5ojKvxB2Zov8cj2-34BW7I8gGYX4zK/pub?gid=956140635&single=true&output=csv';
 
   let map;
-  let currentMode = 'room'; // 'room' or 'path'
+  let currentMode = 'room';
   let currentLat = 0;
   let currentLng = 0;
   
   let existingRoomsLayer = L.layerGroup(); 
+  let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved & active path lines
   
-  // Path Drawer variables
   let pathCoordinates = [];
   let currentPolyline = null;
   let pathMarkersLayer = L.layerGroup();
@@ -373,12 +370,12 @@
       tap: false
     }).setView([20.5937, 78.9629], 5);
 
-    // Google Satellite Hybrid Tiles
     L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
       maxZoom: 20,
       attribution: '&copy; Google Maps'
     }).addTo(map);
 
+    // Add room markers layer initially
     existingRoomsLayer.addTo(map);
     pathMarkersLayer.addTo(map);
 
@@ -408,6 +405,14 @@
       pathSec.style.display = 'none';
       pointer.style.display = 'block';
       mapLabel.innerText = "Position Pin at Exact Room Spot";
+
+      // SHOW room pins, HIDE paths layer
+      if (!map.hasLayer(existingRoomsLayer)) {
+        map.addLayer(existingRoomsLayer);
+      }
+      if (map.hasLayer(drawnPathsOverlayLayer)) {
+        map.removeLayer(drawnPathsOverlayLayer);
+      }
     } else {
       pathBtn.classList.add('active');
       roomBtn.classList.remove('active');
@@ -415,6 +420,14 @@
       roomSec.style.display = 'none';
       pointer.style.display = 'none';
       mapLabel.innerText = "Tap on map to place segment points";
+
+      // HIDE room pins, SHOW paths layer
+      if (map.hasLayer(existingRoomsLayer)) {
+        map.removeLayer(existingRoomsLayer);
+      }
+      if (!map.hasLayer(drawnPathsOverlayLayer)) {
+        map.addLayer(drawnPathsOverlayLayer);
+      }
     }
   }
 
@@ -437,9 +450,9 @@
 
     if (pathCoordinates.length > 0) {
       currentPolyline = L.polyline(pathCoordinates, {
-        color: '#34a853',
-        weight: 4,
-        opacity: 0.85
+        color: '#ff9800', // Vibrant Orange for current active drawing
+        weight: 5,
+        opacity: 0.9
       }).addTo(map);
 
       pathCoordinates.forEach((coord) => {
@@ -447,7 +460,7 @@
           radius: 4,
           color: '#ffffff',
           weight: 1,
-          fillColor: '#34a853',
+          fillColor: '#ff9800',
           fillOpacity: 1
         }).addTo(pathMarkersLayer);
       });
@@ -478,6 +491,13 @@
     const statusDiv = document.getElementById('status');
 
     const pathId = `PATH_${Date.now()}`;
+
+    // Add finalized path to persistent overlay layer so it stays visible while drawing next segments
+    L.polyline(pathCoordinates, {
+      color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
+      weight: 4,
+      opacity: 0.75
+    }).bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`).addTo(drawnPathsOverlayLayer);
 
     const payload = {
       type: 'path',
