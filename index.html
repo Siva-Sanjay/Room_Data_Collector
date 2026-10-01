@@ -242,7 +242,7 @@
   <!-- Mode Selector Tabs -->
   <div class="mode-switch">
     <button type="button" class="mode-btn active" id="roomModeBtn" onclick="switchMode('room')">📍 Room Mode</button>
-    <button type="button" class="mode-btn" id="pathModeBtn" onclick="switchMode('path')">🛣️ Path Drawer</button>
+    <button type="button" class="mode-btn" id="pathModeBtn" onclick="switchMode('path')">🛣️️ Path Drawer</button>
   </div>
 
   <!-- SECTION 1: ROOM COLLECTOR FORM -->
@@ -305,8 +305,8 @@
       <p class="hint-text">💡 Tap points to draw segments. Taps within <b>3m</b> of existing nodes auto-snap! 🧲</p>
 
       <div class="form-group">
-        <label for="pathName">Segment Name / ID</label>
-        <input type="text" id="pathName" placeholder="e.g. Seg_Gate_To_JunctionA">
+        <label for="pathName">Segment Number / ID</label>
+        <input type="text" id="pathName" placeholder="1">
       </div>
 
       <div class="form-group">
@@ -364,8 +364,8 @@
   let existingRoomsLayer = L.layerGroup(); 
   let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved path lines & junction dots
   
-  // Array holding all existing junction coordinates for auto-snapping
   let allExistingNodes = [];
+  let savedPathCount = 0; // Incremental counter for path segment numbering
 
   // Path Drawer variables
   let pathCoordinates = [];
@@ -396,6 +396,14 @@
     loadExistingRooms();
     loadExistingPaths();
     locateDevice();
+  }
+
+  function updatePathPlaceholder() {
+    const nextNumber = savedPathCount + 1;
+    const pathInput = document.getElementById('pathName');
+    if (pathInput) {
+      pathInput.placeholder = nextNumber;
+    }
   }
 
   function switchMode(mode) {
@@ -435,13 +443,14 @@
       if (!map.hasLayer(drawnPathsOverlayLayer)) {
         map.addLayer(drawnPathsOverlayLayer);
       }
+      updatePathPlaceholder();
     }
   }
 
   // Snapping Engine: Auto-snaps tap to nearest existing node within 3 meters
   function snapToNearestNode(lat, lng) {
     const tapPoint = L.latLng(lat, lng);
-    const snapThresholdMeters = 3.0; // 3-meter snapping radius
+    const snapThresholdMeters = 3.0;
 
     let closestNode = null;
     let minDistance = Infinity;
@@ -484,7 +493,7 @@
 
     if (pathCoordinates.length > 0) {
       currentPolyline = L.polyline(pathCoordinates, {
-        color: '#ff9800', // Active drawing segment (Orange)
+        color: '#ff9800',
         weight: 5,
         opacity: 0.9
       }).addTo(map);
@@ -520,20 +529,20 @@
     }
 
     const pathNameInput = document.getElementById('pathName').value.trim();
-    const pathName = pathNameInput || `Seg_${Date.now()}`;
+    // Default to incremental count: 1, 2, 3, etc.
+    const segmentNumber = (savedPathCount + 1).toString();
+    const pathName = pathNameInput || segmentNumber;
     const pathType = document.getElementById('pathType').value;
     const statusDiv = document.getElementById('status');
 
-    const pathId = `PATH_${Date.now()}`;
+    const pathId = `PATH_${pathName}`;
 
-    // Add newly drawn path to overlay layer right away
     L.polyline(pathCoordinates, {
-      color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
+      color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8',
       weight: 4,
       opacity: 0.8
-    }).bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`).addTo(drawnPathsOverlayLayer);
+    }).bindPopup(`<b>Segment ${pathName}</b><br>Type: ${pathType}`).addTo(drawnPathsOverlayLayer);
 
-    // Draw node dots for active segment and register in node cache
     pathCoordinates.forEach(coord => {
       L.circleMarker(coord, {
         radius: 3,
@@ -564,8 +573,10 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(() => {
+      savedPathCount++;
       clearCurrentPath();
       document.getElementById('pathName').value = '';
+      updatePathPlaceholder();
     }).catch(err => {
       statusDiv.style.color = "#d93025";
       statusDiv.innerText = "❌ Sync Failed: " + err.message;
@@ -579,7 +590,7 @@
     if (isManual) {
       statusDiv.style.color = "#1a73e8";
       statusDiv.innerText = "↻ Refreshing map...";
-      loadExistingPaths(); // Refresh paths as well on manual refresh
+      loadExistingPaths();
     }
 
     const freshCsvUrl = sheetCsvUrl + '&t=' + new Date().getTime();
@@ -615,10 +626,10 @@
     });
   }
 
-  // Load and render all saved path segments + node dots from Path_data CSV tab
   function loadExistingPaths() {
     drawnPathsOverlayLayer.clearLayers();
     allExistingNodes = [];
+    savedPathCount = 0;
 
     const freshPathCsvUrl = pathSheetCsvUrl + '&t=' + new Date().getTime();
 
@@ -632,19 +643,19 @@
             if (row.Coordinates_JSON) {
               const coords = JSON.parse(row.Coordinates_JSON);
               const pathType = row.Path_Type || 'walkway';
-              const pathName = row.Path_Name || 'Saved Segment';
+              const pathName = row.Path_Name || (savedPathCount + 1).toString();
 
               if (Array.isArray(coords) && coords.length >= 2) {
-                // Draw path line
+                savedPathCount++;
+
                 L.polyline(coords, {
-                  color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
+                  color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8',
                   weight: 4,
                   opacity: 0.8
                 })
-                .bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`)
+                .bindPopup(`<b>Segment ${pathName}</b><br>Type: ${pathType}`)
                 .addTo(drawnPathsOverlayLayer);
 
-                // Draw highlighted node dots for each vertex
                 coords.forEach(coord => {
                   allExistingNodes.push(coord);
 
@@ -662,6 +673,7 @@
             console.warn("Could not parse path row: ", err);
           }
         });
+        updatePathPlaceholder();
       }
     });
   }
