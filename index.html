@@ -302,7 +302,7 @@
     <h2>🛣️ Add Path Segment</h2>
     <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
       
-      <p class="hint-text">💡 Tap points on map to draw short junction-to-junction segments.</p>
+      <p class="hint-text">💡 Tap points to draw segments. Taps within <b>3m</b> of existing nodes auto-snap! 🧲</p>
 
       <div class="form-group">
         <label for="pathName">Segment Name / ID</label>
@@ -362,8 +362,11 @@
   let currentLng = 0;
   
   let existingRoomsLayer = L.layerGroup(); 
-  let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved path lines from Google Sheet
+  let drawnPathsOverlayLayer = L.layerGroup(); // Holds saved path lines & junction dots
   
+  // Array holding all existing junction coordinates for auto-snapping
+  let allExistingNodes = [];
+
   // Path Drawer variables
   let pathCoordinates = [];
   let currentPolyline = null;
@@ -412,7 +415,6 @@
       pointer.style.display = 'block';
       mapLabel.innerText = "Position Pin at Exact Room Spot";
 
-      // SHOW room pins, HIDE paths overlay
       if (!map.hasLayer(existingRoomsLayer)) {
         map.addLayer(existingRoomsLayer);
       }
@@ -427,7 +429,6 @@
       pointer.style.display = 'none';
       mapLabel.innerText = "Tap on map to place segment points";
 
-      // HIDE room pins, SHOW paths overlay
       if (map.hasLayer(existingRoomsLayer)) {
         map.removeLayer(existingRoomsLayer);
       }
@@ -437,12 +438,39 @@
     }
   }
 
+  // Snapping Engine: Auto-snaps tap to nearest existing node within 3 meters
+  function snapToNearestNode(lat, lng) {
+    const tapPoint = L.latLng(lat, lng);
+    const snapThresholdMeters = 3.0; // 3-meter snapping radius
+
+    let closestNode = null;
+    let minDistance = Infinity;
+
+    allExistingNodes.concat(pathCoordinates).forEach(node => {
+      const nodeLatLng = L.latLng(node[0], node[1]);
+      const dist = tapPoint.distanceTo(nodeLatLng);
+
+      if (dist < minDistance && dist <= snapThresholdMeters) {
+        minDistance = dist;
+        closestNode = node;
+      }
+    });
+
+    if (closestNode) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.style.color = "#1a73e8";
+      statusDiv.innerText = `🧲 Snapped to existing junction node!`;
+      setTimeout(() => { if (statusDiv.innerText.includes('Snapped')) statusDiv.innerText = ""; }, 1500);
+      return [closestNode[0], closestNode[1]];
+    }
+
+    return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))];
+  }
+
   function handleMapClick(e) {
     if (currentMode === 'path') {
-      const lat = parseFloat(e.latlng.lat.toFixed(6));
-      const lng = parseFloat(e.latlng.lng.toFixed(6));
-
-      pathCoordinates.push([lat, lng]);
+      const snappedCoords = snapToNearestNode(e.latlng.lat, e.latlng.lng);
+      pathCoordinates.push(snappedCoords);
       renderPathOnMap();
     }
   }
@@ -498,12 +526,25 @@
 
     const pathId = `PATH_${Date.now()}`;
 
-    // Immediately display newly drawn path in the overlay layer
+    // Add newly drawn path to overlay layer right away
     L.polyline(pathCoordinates, {
       color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
       weight: 4,
       opacity: 0.8
     }).bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`).addTo(drawnPathsOverlayLayer);
+
+    // Draw node dots for active segment and register in node cache
+    pathCoordinates.forEach(coord => {
+      L.circleMarker(coord, {
+        radius: 3,
+        color: '#ffffff',
+        weight: 1,
+        fillColor: '#1a73e8',
+        fillOpacity: 0.9
+      }).addTo(drawnPathsOverlayLayer);
+
+      allExistingNodes.push(coord);
+    });
 
     const payload = {
       type: 'path',
@@ -574,9 +615,11 @@
     });
   }
 
-  // Load and render all saved path segments from Path_data CSV tab
+  // Load and render all saved path segments + node dots from Path_data CSV tab
   function loadExistingPaths() {
     drawnPathsOverlayLayer.clearLayers();
+    allExistingNodes = [];
+
     const freshPathCsvUrl = pathSheetCsvUrl + '&t=' + new Date().getTime();
 
     Papa.parse(freshPathCsvUrl, {
@@ -592,6 +635,7 @@
               const pathName = row.Path_Name || 'Saved Segment';
 
               if (Array.isArray(coords) && coords.length >= 2) {
+                // Draw path line
                 L.polyline(coords, {
                   color: pathType === 'ramp' ? '#9c27b0' : '#1a73e8', // Purple for ramps, Blue for walkways
                   weight: 4,
@@ -599,6 +643,19 @@
                 })
                 .bindPopup(`<b>${pathName}</b><br>Type: ${pathType}`)
                 .addTo(drawnPathsOverlayLayer);
+
+                // Draw highlighted node dots for each vertex
+                coords.forEach(coord => {
+                  allExistingNodes.push(coord);
+
+                  L.circleMarker(coord, {
+                    radius: 3,
+                    color: '#ffffff',
+                    weight: 1,
+                    fillColor: pathType === 'ramp' ? '#9c27b0' : '#1a73e8',
+                    fillOpacity: 0.9
+                  }).addTo(drawnPathsOverlayLayer);
+                });
               }
             }
           } catch (err) {
